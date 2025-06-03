@@ -1,6 +1,6 @@
 module github.com/CAPS-Cloud/exercises
 
-go 1.22.0
+go 1.23
 
 require (
 	github.com/gogo/protobuf v1.3.2
