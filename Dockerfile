@@ -5,8 +5,8 @@ FROM golang:1.23-alpine
 WORKDIR /app
 
 COPY service /app/service
-COPY css ./css
-COPY views ./views
+COPY css/ ./css
+COPY views/ ./views
 RUN chmod +x /app/service
 RUN mkdir /app/logs
 
