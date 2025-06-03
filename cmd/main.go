@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"html/template"
 	"io"
 	"log"
@@ -17,18 +18,18 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 // Defines a "model" that we can use to communicate with the
 // frontend or the database
 type BookStore struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty"`
-	BookName   string
-	BookAuthor string
-	BookISBN   string
-	BookPages  int
-	BookYear   int
+	MongoID     primitive.ObjectID `bson:"_id,omitempty" json:"mongo_id"`
+	ID          string             `bson:"id" json:"id"`
+	BookName    string             `bson:"title" json:"title"`
+	BookAuthor  string             `bson:"author" json:"author"`
+	BookEdition string             `bson:"edition" json:"edition"`
+	BookPages   string             `bson:"pages" json:"pages"`
+	BookYear    string             `bson:"year" json:"year"`
 }
 
 // Wraps the "Template" struct to associate a necessary method
@@ -95,25 +96,28 @@ func prepareDatabase(client *mongo.Client, dbName string, collecName string) (*m
 func prepareData(client *mongo.Client, coll *mongo.Collection) {
 	startData := []BookStore{
 		{
-			BookName:   "The Vortex",
-			BookAuthor: "José Eustasio Rivera",
-			BookISBN:   "958-30-0804-4",
-			BookPages:  292,
-			BookYear:   1924,
+			ID:          "example1",
+			BookName:    "The Vortex",
+			BookAuthor:  "José Eustasio Rivera",
+			BookEdition: "958-30-0804-4",
+			BookPages:   "292",
+			BookYear:    "1924",
 		},
 		{
-			BookName:   "Frankenstein",
-			BookAuthor: "Mary Shelley",
-			BookISBN:   "978-3-649-64609-9",
-			BookPages:  280,
-			BookYear:   1818,
+			ID:          "example2",
+			BookName:    "Frankenstein",
+			BookAuthor:  "Mary Shelley",
+			BookEdition: "978-3-649-64609-9",
+			BookPages:   "280",
+			BookYear:    "1818",
 		},
 		{
-			BookName:   "The Black Cat",
-			BookAuthor: "Edgar Allan Poe",
-			BookISBN:   "978-3-99168-238-7",
-			BookPages:  280,
-			BookYear:   1843,
+			ID:          "example3",
+			BookName:    "The Black Cat",
+			BookAuthor:  "Edgar Allan Poe",
+			BookEdition: "978-3-99168-238-7",
+			BookPages:   "280",
+			BookYear:    "1843",
 		},
 	}
 
@@ -153,25 +157,32 @@ func prepareData(client *mongo.Client, coll *mongo.Collection) {
 // it is not :D ), and then we convert it into an array of map. In Golang, you
 // define a map by writing map[<key type>]<value type>{<key>:<value>}.
 // interface{} is a special type in Golang, basically a wildcard...
-func findAllBooks(coll *mongo.Collection) []map[string]interface{} {
+func findAllBooks(coll *mongo.Collection) []BookStore {
 	cursor, err := coll.Find(context.TODO(), bson.D{{}})
 	var results []BookStore
 	if err = cursor.All(context.TODO(), &results); err != nil {
 		panic(err)
 	}
-
-	var ret []map[string]interface{}
-	for _, res := range results {
-		ret = append(ret, map[string]interface{}{
-			"ID":         res.ID.Hex(),
-			"BookName":   res.BookName,
-			"BookAuthor": res.BookAuthor,
-			"BookISBN":   res.BookISBN,
-			"BookPages":  res.BookPages,
-		})
+	return results
+}
+func findById(id string, coll *mongo.Collection) *BookStore {
+	c := coll.FindOne(context.TODO(), bson.D{{"id", id}})
+	var result BookStore
+	err := c.Decode(&result)
+	if err != nil {
+		return nil
 	}
+	return &result
+}
 
-	return ret
+func findByMongoId(mongoId primitive.ObjectID, coll *mongo.Collection) BookStore {
+	c := coll.FindOne(context.TODO(), bson.D{{"_id", mongoId}})
+	var result BookStore
+	err := c.Decode(&result)
+	if err != nil {
+		return BookStore{}
+	}
+	return result
 }
 
 func main() {
@@ -211,7 +222,7 @@ func main() {
 
 	// You can use such name for the database and collection, or come up with
 	// one by yourself!
-	coll, err := prepareDatabase(client, "exercise-2", "information")
+	coll, err := prepareDatabase(client, "exercise-1", "information")
 
 	prepareData(client, coll)
 
@@ -261,5 +272,67 @@ func main() {
 		return c.JSON(http.StatusOK, books)
 	})
 
+	e.POST("/api/books", func(c echo.Context) error {
+		store := BookStore{}
+		if err := c.Bind(&store); err != nil {
+			return err
+		}
+
+		existing := findById(store.ID, coll)
+		if existing != nil {
+			return c.NoContent(http.StatusBadRequest)
+		}
+
+		cursor, err := coll.InsertOne(context.TODO(), store)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, findByMongoId(cursor.InsertedID.(primitive.ObjectID), coll))
+	})
+
+	e.PUT("/api/books/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		println("update: " + id)
+		store := BookStore{}
+		if err := c.Bind(&store); err != nil {
+			return err
+		}
+
+		existing := findById(id, coll)
+		if existing == nil {
+			return c.NoContent(http.StatusNotFound)
+		}
+
+		_, err := coll.ReplaceOne(context.TODO(), bson.D{{"id", id}}, store)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, findByMongoId(existing.MongoID, coll))
+	})
+
+	e.DELETE("/api/books/:id", func(c echo.Context) error {
+		id := c.Param("id")
+
+		existing := findById(id, coll)
+		if existing == nil {
+			return c.NoContent(http.StatusNotFound)
+		}
+
+		_, err := coll.DeleteOne(context.TODO(), bson.D{{"id", id}})
+		if err != nil {
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	// We start the server and bind it to port 3030. For future references, this
+	// is the application's port and not the external one. For this first exercise,
+	// they could be the same if you use a Cloud Provider. If you use ngrok or similar,
+	// they might differ.
+	// In the submission website for this exercise, you will have to provide the internet-reachable
+	// endpoint: http://<host>:<external-port>
 	e.Logger.Fatal(e.Start(":3030"))
 }
