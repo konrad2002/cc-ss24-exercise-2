@@ -267,67 +267,6 @@ func main() {
 		return c.NoContent(http.StatusNoContent)
 	})
 
-	e.GET("/api/books", func(c echo.Context) error {
-		books := findAllBooks(coll)
-		return c.JSON(http.StatusOK, books)
-	})
-
-	e.POST("/api/books", func(c echo.Context) error {
-		store := BookStore{}
-		if err := c.Bind(&store); err != nil {
-			return err
-		}
-
-		existing := findById(store.ID, coll)
-		if existing != nil {
-			return c.NoContent(http.StatusBadRequest)
-		}
-
-		cursor, err := coll.InsertOne(context.TODO(), store)
-		if err != nil {
-			return err
-		}
-
-		return c.JSON(http.StatusOK, findByMongoId(cursor.InsertedID.(primitive.ObjectID), coll))
-	})
-
-	e.PUT("/api/books/:id", func(c echo.Context) error {
-		id := c.Param("id")
-		println("update: " + id)
-		store := BookStore{}
-		if err := c.Bind(&store); err != nil {
-			return err
-		}
-
-		existing := findById(id, coll)
-		if existing == nil {
-			return c.NoContent(http.StatusNotFound)
-		}
-
-		_, err := coll.ReplaceOne(context.TODO(), bson.D{{"id", id}}, store)
-		if err != nil {
-			return err
-		}
-
-		return c.JSON(http.StatusOK, findByMongoId(existing.MongoID, coll))
-	})
-
-	e.DELETE("/api/books/:id", func(c echo.Context) error {
-		id := c.Param("id")
-
-		existing := findById(id, coll)
-		if existing == nil {
-			return c.NoContent(http.StatusNotFound)
-		}
-
-		_, err := coll.DeleteOne(context.TODO(), bson.D{{"id", id}})
-		if err != nil {
-			return err
-		}
-
-		return c.NoContent(http.StatusNoContent)
-	})
-
 	// We start the server and bind it to port 3030. For future references, this
 	// is the application's port and not the external one. For this first exercise,
 	// they could be the same if you use a Cloud Provider. If you use ngrok or similar,
