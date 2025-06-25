@@ -2,9 +2,11 @@ name: Go
 
 on:
   push:
-    branches: [ "main", "master", "develop" ]
+    branches:
+      - "**"
   pull_request:
-    branches: [ "main", "master", "develop" ]
+    branches:
+      - "**"
     
 env:
   # Use docker.io for Docker Hub if empty
