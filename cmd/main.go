@@ -236,96 +236,9 @@ func main() {
 	// middleware
 	e.Use(middleware.Logger())
 
-	e.Static("/css", "css")
-
-	// Endpoint definition. Here, we divided into two groups: top-level routes
-	// starting with /, which usually serve webpages. For our RESTful endpoints,
-	// we prefix the route with /api to indicate more information or resources
-	// are available under such route.
-	e.GET("/", func(c echo.Context) error {
-		return c.Render(200, "index", nil)
-	})
-
-	e.GET("/books", func(c echo.Context) error {
-		books := findAllBooks(coll)
-		return c.Render(200, "book-table", books)
-	})
-
-	e.GET("/authors", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
-
-	e.GET("/years", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
-
-	e.GET("/search", func(c echo.Context) error {
-		return c.Render(200, "search-bar", nil)
-	})
-
-	e.GET("/create", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
-
 	e.GET("/api/books", func(c echo.Context) error {
 		books := findAllBooks(coll)
 		return c.JSON(http.StatusOK, books)
-	})
-
-	e.POST("/api/books", func(c echo.Context) error {
-		store := BookStore{}
-		if err := c.Bind(&store); err != nil {
-			return err
-		}
-
-		existing := findById(store.ID, coll)
-		if existing != nil {
-			return c.NoContent(http.StatusBadRequest)
-		}
-
-		cursor, err := coll.InsertOne(context.TODO(), store)
-		if err != nil {
-			return err
-		}
-
-		return c.JSON(http.StatusOK, findByMongoId(cursor.InsertedID.(primitive.ObjectID), coll))
-	})
-
-	e.PUT("/api/books/:id", func(c echo.Context) error {
-		id := c.Param("id")
-		println("update: " + id)
-		store := BookStore{}
-		if err := c.Bind(&store); err != nil {
-			return err
-		}
-
-		existing := findById(id, coll)
-		if existing == nil {
-			return c.NoContent(http.StatusNotFound)
-		}
-
-		_, err := coll.ReplaceOne(context.TODO(), bson.D{{"id", id}}, store)
-		if err != nil {
-			return err
-		}
-
-		return c.JSON(http.StatusOK, findByMongoId(existing.MongoID, coll))
-	})
-
-	e.DELETE("/api/books/:id", func(c echo.Context) error {
-		id := c.Param("id")
-
-		existing := findById(id, coll)
-		if existing == nil {
-			return c.NoContent(http.StatusNotFound)
-		}
-
-		_, err := coll.DeleteOne(context.TODO(), bson.D{{"id", id}})
-		if err != nil {
-			return err
-		}
-
-		return c.NoContent(http.StatusNoContent)
 	})
 
 	// We start the server and bind it to port 3030. For future references, this
